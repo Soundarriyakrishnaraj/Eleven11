@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "886777894855",
+    "project_id": "eleven11-app",
+    "storage_bucket": "eleven11-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:886777894855:android:ff158f5e104730021cebe2",
+        "android_client_info": {
+          "package_name": "com.eleven11.eleven11"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDkaCGmXl7Ev1eJxk1gtLkuIohz-ZSCPmE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

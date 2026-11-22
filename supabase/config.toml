@@ -1,0 +1,8 @@
+[functions.username-login]
+verify_jwt = false
+
+[functions.registration-check]
+verify_jwt = false
+
+[functions.password-recovery-start]
+verify_jwt = false
