@@ -147,11 +147,30 @@ app.use((request, response, next) => {
   next();
 });
 
-app.get('/healthz', (_request, response) => {
-  response.json({
-    status: 'ok',
-    pooler: !!pgPool,
-  });
+app.get('/healthz', async (_request, response) => {
+  if (!pgPool) {
+    return response.status(503).json({
+      status: 'degraded',
+      pooler: false,
+      database: 'not_configured',
+    });
+  }
+
+  try {
+    await pgPool.query('SELECT 1');
+    return response.status(200).json({
+      status: 'ok',
+      pooler: true,
+      database: 'connected',
+    });
+  } catch (error) {
+    console.error('Database health check failed:', error?.message || 'Unknown error');
+    return response.status(503).json({
+      status: 'degraded',
+      pooler: true,
+      database: 'unavailable',
+    });
+  }
 });
 
 function requestError(response, status, message) {
