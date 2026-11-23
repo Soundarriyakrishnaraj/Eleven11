@@ -1,0 +1,22 @@
+{
+  "name": "eleven11-custom-auth-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch --env-file=.env src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "argon2": "^0.41.1",
+    "bcryptjs": "^3.0.2",
+    "express": "^4.21.2",
+    "googleapis": "^190.0.0",
+    "pg": "^8.13.1"
+  }
+}
