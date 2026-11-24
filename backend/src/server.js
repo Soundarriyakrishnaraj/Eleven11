@@ -20,6 +20,8 @@ import {
   validUsername,
   verifyPassword,
 } from './security.js';
+import { createRequireCalendarAuth } from './calendar_auth.js';
+
 import {
   deleteEventFromGoogle,
   disconnectCalendar,
@@ -1110,12 +1112,23 @@ function requireGoogleCalendarConfig(response) {
 }
 
 // -----------------------------------------------------------------------------
+// CALENDAR AUTHENTICATION BRIDGE
+// -----------------------------------------------------------------------------
+
+export const requireCalendarAuth = createRequireCalendarAuth({
+  admin,
+  findSession,
+  pgPool,
+  requestError,
+});
+
+// -----------------------------------------------------------------------------
 // GOOGLE CALENDAR ROUTES
 // -----------------------------------------------------------------------------
 
 // 1. GET /api/calendar/auth-url
 app.get('/api/calendar/auth-url', async (req, res) => {
-  const session = await requireSession(req, res);
+  const session = await requireCalendarAuth(req, res);
   if (!session) return;
 
   if (!requireGoogleCalendarConfig(res)) return;
@@ -1186,7 +1199,7 @@ app.get('/api/calendar/callback', async (req, res) => {
 
 // 3. GET /api/calendar/status
 app.get('/api/calendar/status', async (req, res) => {
-  const session = await requireSession(req, res);
+  const session = await requireCalendarAuth(req, res);
   if (!session) return;
 
   // ADDED: Check Google Calendar configuration before querying.
@@ -1210,7 +1223,7 @@ app.get('/api/calendar/status', async (req, res) => {
 
 // 4. POST /api/calendar/disconnect
 app.post('/api/calendar/disconnect', async (req, res) => {
-  const session = await requireSession(req, res);
+  const session = await requireCalendarAuth(req, res);
   if (!session) return;
 
   if (!requireGoogleCalendarConfig(res)) return;
@@ -1234,7 +1247,7 @@ app.post('/api/calendar/disconnect', async (req, res) => {
 
 // 5. POST /api/calendar/sync-event
 app.post('/api/calendar/sync-event', async (req, res) => {
-  const session = await requireSession(req, res);
+  const session = await requireCalendarAuth(req, res);
   if (!session) return;
 
   if (!requireGoogleCalendarConfig(res)) return;
@@ -1259,7 +1272,7 @@ app.post('/api/calendar/sync-event', async (req, res) => {
 
 // 6. POST /api/calendar/delete-event
 app.post('/api/calendar/delete-event', async (req, res) => {
-  const session = await requireSession(req, res);
+  const session = await requireCalendarAuth(req, res);
   if (!session) return;
 
   if (!requireGoogleCalendarConfig(res)) return;
@@ -1292,7 +1305,7 @@ app.post('/api/calendar/delete-event', async (req, res) => {
 
 // 7. POST /api/calendar/pull-sync
 app.post('/api/calendar/pull-sync', async (req, res) => {
-  const session = await requireSession(req, res);
+  const session = await requireCalendarAuth(req, res);
   if (!session) return;
 
   if (!requireGoogleCalendarConfig(res)) return;
