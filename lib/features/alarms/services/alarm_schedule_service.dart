@@ -734,7 +734,10 @@ class AlarmScheduleService {
           : null,
       audioAttributesUsage: AudioAttributesUsage.alarm,
       visibility: NotificationVisibility.public,
-      autoCancel: true,
+      fullScreenIntent: true,
+      ongoing: true,
+      autoCancel: false,
+      additionalFlags: Int32List.fromList([4]), // FLAG_INSISTENT (0x00000004) repeatedly plays notification audio
       actions: const <AndroidNotificationAction>[
         AndroidNotificationAction(
           actionSnooze,
@@ -867,7 +870,10 @@ class AlarmScheduleService {
           : null,
       audioAttributesUsage: AudioAttributesUsage.alarm,
       visibility: NotificationVisibility.public,
-      autoCancel: true,
+      fullScreenIntent: true,
+      ongoing: true,
+      autoCancel: false,
+      additionalFlags: Int32List.fromList([4]), // FLAG_INSISTENT (0x00000004) repeatedly plays notification audio
       actions: const <AndroidNotificationAction>[
         AndroidNotificationAction(
           actionSnooze,

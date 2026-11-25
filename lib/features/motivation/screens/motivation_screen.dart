@@ -4,7 +4,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/providers/theme_provider.dart';
 import '../../dashboard/dashboard_screen.dart';
 import '../models/motivation_models.dart';
 import '../providers/motivation_providers.dart';
@@ -410,7 +409,7 @@ class _MotivationScreenState extends ConsumerState<MotivationScreen> {
         title: Text(
           'ELEVEN11',
           style: TextStyle(
-            color: kSignatureOrange,
+            color: Theme.of(context).colorScheme.primary,
             fontWeight: FontWeight.bold,
             letterSpacing: 3,
           ),

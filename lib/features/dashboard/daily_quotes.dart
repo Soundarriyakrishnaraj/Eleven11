@@ -1,0 +1,61 @@
+/// 50 daily motivational quotes shown on the home page (one per day).
+const List<String> dailyQuotes = [
+  "Stop waiting for the perfect moment. Make this moment powerful.",
+  "Your future is watching what you do today. Give it something to be proud of.",
+  "You were not born to live on autopilot. Wake up. Rise up. Take charge.",
+  "Every time you choose discipline over comfort, you become harder to defeat.",
+  "Don't let a temporary feeling destroy a permanent dream.",
+  "Your excuses are loud, but your potential is louder. Listen to the right voice.",
+  "One day, your smallest steps will become the distance everyone admires.",
+  "Become so committed to your growth that your old habits no longer recognize you.",
+  "Nobody is coming to build your dream. Pick up the tools and start.",
+  "The person you want to become is waiting on the other side of your excuses.",
+  "You don't need another Monday. You need one decision. Make it now.",
+  "Turn your frustration into fuel and your ambition into action.",
+  "Your comfort zone is a beautiful place, but nothing extraordinary grows there.",
+  "Win the battle inside your mind, and the world becomes a different place.",
+  "Don't count the days you survived. Make the days count.",
+  "You can restart your life without restarting the calendar.",
+  "Let your actions introduce you before your words ever do.",
+  "Be obsessed with progress, not applause.",
+  "The strongest version of you is built on the days you want to quit.",
+  "Dreams don't respond to wishes. They respond to work.",
+  "Your past is a chapter, not your identity. Write a stronger next page.",
+  "Small promises kept to yourself create unstoppable confidence.",
+  "Don't compete with someone else's highlight reel. Build your own masterpiece.",
+  "Make your discipline so strong that your mood loses its power over you.",
+  "Every unfinished task is a conversation with the person you could become. Finish it.",
+  "If it matters to your future, give it time today.",
+  "Your potential is not a decoration. Put it to work.",
+  "Be the reason your younger self would smile with pride.",
+  "Stop negotiating with the habits that are stealing your future.",
+  "Greatness begins when your standards become stronger than your excuses.",
+  "You don't need to feel fearless. Move forward while fear watches.",
+  "A difficult beginning can still create an extraordinary ending.",
+  "Protect your mornings. They are the opening chapter of your greatness.",
+  "The person who keeps showing up eventually surprises the person who gave up.",
+  "Don't just plan a different life. Practice it today.",
+  "Your goals deserve more than leftover time and half-hearted effort.",
+  "Turn every setback into a setup for a stronger comeback.",
+  "Be proud of the effort nobody saw. That's where real strength is built.",
+  "You are one brave decision away from changing your direction.",
+  "Never shrink your ambition to match someone else's expectations.",
+  "The world doesn't need another copy. It needs the strongest version of you.",
+  "Make today so intentional that tomorrow has something to thank you for.",
+  "Don't let yesterday's failure steal today's opportunity.",
+  "Your life changes when your daily choices change.",
+  "Be relentless about your goals, but patient with your growth.",
+  "Stop asking whether you can. Start proving that you will.",
+  "Your next breakthrough might be hiding behind the task you're avoiding.",
+  "Build a life that makes you excited to wake up.",
+  "Even on your slowest day, refuse to stand still.",
+  "You have one life. Make your effort worthy of it. Rise. Begin. Become.",
+];
+
+/// Quote for [date]; changes every calendar day and cycles through all 50.
+String quoteForDate(DateTime date) {
+  final day = DateTime.utc(date.year, date.month, date.day)
+      .difference(DateTime.utc(2024, 1, 1))
+      .inDays;
+  return dailyQuotes[day % dailyQuotes.length];
+}

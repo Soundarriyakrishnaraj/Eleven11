@@ -21,6 +21,7 @@ import {
   verifyPassword,
 } from './security.js';
 import { createRequireCalendarAuth } from './calendar_auth.js';
+import { createAdminHandlers } from './admin_api.js';
 
 import {
   deleteEventFromGoogle,
@@ -1326,6 +1327,119 @@ app.post('/api/calendar/pull-sync', async (req, res) => {
     });
   }
 });
+
+// -----------------------------------------------------------------------------
+// ADMIN AUTHORIZATION MIDDLEWARE & ENDPOINTS
+// -----------------------------------------------------------------------------
+
+const DESIGNATED_ADMIN_UUID = '74aa5b3c-9b9f-440e-b104-98fbbe2b6e6a';
+
+const adminHandlers = createAdminHandlers({
+  requireAuth: requireCalendarAuth,
+  admin,
+  pgPool,
+  requestError,
+  designatedAdminUuid: DESIGNATED_ADMIN_UUID,
+});
+
+// User activity tracking endpoints (authenticated end-users)
+app.post('/api/activity/auth-event', adminHandlers.recordAuthEvent);
+app.post('/api/activity/heartbeat', adminHandlers.recordHeartbeat);
+
+// Direct password recovery endpoints (verify identity -> reset password)
+app.post('/api/auth/verify-recovery', async (request, response) => {
+  const { username, email, dateOfBirth } = request.body || {};
+  if (
+    typeof username !== 'string' ||
+    typeof email !== 'string' ||
+    typeof dateOfBirth !== 'string' ||
+    !validUsername(username.trim()) ||
+    !validEmail(normalizeEmail(email)) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth.trim())
+  ) {
+    return requestError(response, 400, 'Enter a valid username, email, and date of birth.');
+  }
+
+  try {
+    const { data, error } = await admin.rpc('auth_recovery_identity', {
+      p_username: username.trim(),
+      p_email: normalizeEmail(email),
+      p_date_of_birth: dateOfBirth.trim(),
+    });
+    if (error) {
+      console.error('Recovery identity lookup failed:', error);
+      return requestError(response, 503, 'Unable to verify account details. Please try again.');
+    }
+
+    const account = Array.isArray(data) ? data[0] : null;
+    if (!account || typeof account.user_id !== 'string') {
+      return requestError(response, 404, 'Account details do not match our records.');
+    }
+
+    return response.json({ verified: true });
+  } catch (err) {
+    console.error('Error in /api/auth/verify-recovery:', err);
+    return requestError(response, 500, 'Unable to verify account details.');
+  }
+});
+
+app.post('/api/auth/reset-password', async (request, response) => {
+  const { username, email, dateOfBirth, password } = request.body || {};
+  if (
+    typeof username !== 'string' ||
+    typeof email !== 'string' ||
+    typeof dateOfBirth !== 'string' ||
+    typeof password !== 'string' ||
+    !validUsername(username.trim()) ||
+    !validEmail(normalizeEmail(email)) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth.trim())
+  ) {
+    return requestError(response, 400, 'Invalid recovery details.');
+  }
+
+  const passwordError = validatePassword(password);
+  if (passwordError) {
+    return requestError(response, 400, passwordError);
+  }
+
+  try {
+    const { data, error } = await admin.rpc('auth_recovery_identity', {
+      p_username: username.trim(),
+      p_email: normalizeEmail(email),
+      p_date_of_birth: dateOfBirth.trim(),
+    });
+    if (error) {
+      console.error('Recovery identity lookup failed:', error);
+      return requestError(response, 503, 'Unable to reset password. Please try again.');
+    }
+
+    const account = Array.isArray(data) ? data[0] : null;
+    if (!account || typeof account.user_id !== 'string') {
+      return requestError(response, 404, 'Account details do not match our records.');
+    }
+
+    const { error: updateError } = await admin.auth.admin.updateUserById(
+      account.user_id,
+      { password },
+    );
+    if (updateError) {
+      console.error('Password update failed:', updateError);
+      return requestError(response, 500, 'Unable to update password. Please try again.');
+    }
+
+    return response.json({ reset: true });
+  } catch (err) {
+    console.error('Error in /api/auth/reset-password:', err);
+    return requestError(response, 500, 'Unable to reset password.');
+  }
+});
+
+// Admin panel endpoints (designated admin UUID or admin_roles)
+app.get('/api/admin/metrics', adminHandlers.getMetrics);
+app.get('/api/admin/users', adminHandlers.getUsers);
+app.get('/api/admin/users/:userId/activity', adminHandlers.getUserActivity);
+app.get('/api/admin/feedback', adminHandlers.getFeedback);
+app.patch('/api/admin/feedback/:id', adminHandlers.patchFeedback);
 
 // -----------------------------------------------------------------------------
 // LOGOUT

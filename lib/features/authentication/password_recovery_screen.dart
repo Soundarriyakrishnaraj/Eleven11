@@ -12,7 +12,6 @@ class PasswordRecoveryScreen extends StatefulWidget {
 class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
   final _username = TextEditingController();
   final _email = TextEditingController();
-  final _code = TextEditingController();
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
 
@@ -26,7 +25,6 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
   void dispose() {
     _username.dispose();
     _email.dispose();
-    _code.dispose();
     _password.dispose();
     _confirmPassword.dispose();
     super.dispose();
@@ -63,33 +61,13 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
         dateOfBirth: _dateOfBirth!,
       );
       if (mounted) {
+        FocusManager.instance.primaryFocus?.unfocus();
         setState(() {
           _step = 1;
           _error = null;
         });
       }
     });
-  }
-
-  Future<void> _verifyCode() async {
-    if (_code.text.trim().isEmpty) {
-      setState(() => _error = 'Enter the verification code.');
-      return;
-    }
-
-    await _run(() async {
-      await AuthService().verifyRecoveryCode(
-        email: _email.text,
-        code: _code.text,
-      );
-      if (mounted) {
-        FocusManager.instance.primaryFocus?.unfocus();
-        setState(() {
-          _step = 2;
-          _error = null;
-        });
-      }
-    }, failureMessage: 'The code is invalid or expired. Request a new code.');
   }
 
   Future<void> _resetPassword() async {
@@ -104,7 +82,12 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
     }
 
     await _run(() async {
-      await AuthService().resetPassword(_password.text);
+      await AuthService().resetPasswordWithDetails(
+        username: _username.text.trim(),
+        email: _email.text.trim(),
+        dateOfBirth: _dateOfBirth!,
+        password: _password.text,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Your password has been reset.')),
@@ -134,7 +117,6 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
 
   String get _title => switch (_step) {
     0 => 'Verify your account',
-    1 => 'Enter your email code',
     _ => 'Choose a new password',
   };
 
@@ -161,7 +143,7 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                   const SizedBox(height: 12),
                   if (_step == 0) ...[
                     const Text(
-                      'Enter the details associated with your account. If they match, we will send a one-time code to your registered email.',
+                      'Enter the details associated with your account to verify your identity and set a new password.',
                     ),
                     const SizedBox(height: 20),
                     TextField(
@@ -193,30 +175,6 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                             ? 'Date of birth'
                             : '${_dateOfBirth!.day}/${_dateOfBirth!.month}/${_dateOfBirth!.year}',
                       ),
-                    ),
-                  ] else if (_step == 1) ...[
-                    const Text(
-                      'If the details matched an account, a code was sent to the registered email address. Codes expire and can only be used once.',
-                    ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: _code,
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.done,
-                      decoration: const InputDecoration(
-                        labelText: 'One-time verification code',
-                        prefixIcon: Icon(Icons.verified_user_outlined),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _loading
-                          ? null
-                          : () => setState(() {
-                              _step = 0;
-                              _error = null;
-                              _code.clear();
-                            }),
-                      child: const Text('Use different account details'),
                     ),
                   ] else ...[
                     const Text(
@@ -274,7 +232,6 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                         ? null
                         : switch (_step) {
                             0 => _verifyDetails,
-                            1 => _verifyCode,
                             _ => _resetPassword,
                           },
                     child: _loading
@@ -285,7 +242,6 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                           )
                         : Text(switch (_step) {
                             0 => 'VERIFY',
-                            1 => 'VERIFY CODE',
                             _ => 'RESET PASSWORD',
                           }),
                   ),

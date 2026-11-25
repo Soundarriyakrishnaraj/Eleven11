@@ -1,5 +1,10 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../config/app_config.dart';
+import '../../core/security/user_activity_tracker.dart';
 import '../notifications/notification_service.dart';
 
 class AuthFlowException implements Exception {
@@ -157,6 +162,13 @@ class AuthService {
         await signOut();
       }
       await _client.auth.setSession(data['refresh_token'] as String);
+      final loggedInUser = _client.auth.currentUser;
+      if (loggedInUser != null) {
+        await UserActivityTracker.instance.recordEvent(
+          userId: loggedInUser.id,
+          eventType: 'login',
+        );
+      }
     } on FunctionException catch (error) {
       if (error.status == 401) {
         throw const AuthFlowException('Invalid username or password.');
@@ -177,24 +189,29 @@ class AuthService {
     required String email,
     required DateTime dateOfBirth,
   }) async {
-    try {
-      await _client.functions.invoke(
-        'password-recovery-start',
-        body: {
-          'username': _normalizeUsername(username),
-          'email': _normalizeEmail(email),
-          'dateOfBirth': _dateOnly(dateOfBirth),
-        },
-      );
-    } on FunctionException catch (error) {
-      if (error.status == 429) {
-        throw const AuthFlowException(
-          'Too many requests. Please wait before trying again.',
-        );
-      }
+    final uri = Uri.parse('${AppConfig.renderBackendUrl}/api/auth/verify-recovery');
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'username': _normalizeUsername(username),
+            'email': _normalizeEmail(email),
+            'dateOfBirth': _dateOnly(dateOfBirth),
+          }),
+        )
+        .timeout(const Duration(seconds: 12));
 
-      rethrow;
-    }
+    if (response.statusCode == 200) return;
+
+    String message = 'Unable to verify account details. Please try again.';
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && body['error'] is String) {
+        message = body['error'] as String;
+      }
+    } catch (_) {}
+    throw AuthFlowException(message);
   }
 
   Future<void> verifyRecoveryCode({
@@ -218,6 +235,43 @@ class AuthService {
     await _client.auth.updateUser(UserAttributes(password: password));
 
     await signOut();
+  }
+
+  Future<void> resetPasswordWithDetails({
+    required String username,
+    required String email,
+    required DateTime dateOfBirth,
+    required String password,
+  }) async {
+    final passwordError = PasswordPolicy.validate(password);
+    if (passwordError != null) {
+      throw AuthFlowException(passwordError);
+    }
+
+    final uri = Uri.parse('${AppConfig.renderBackendUrl}/api/auth/reset-password');
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'username': _normalizeUsername(username),
+            'email': _normalizeEmail(email),
+            'dateOfBirth': _dateOnly(dateOfBirth),
+            'password': password,
+          }),
+        )
+        .timeout(const Duration(seconds: 12));
+
+    if (response.statusCode == 200) return;
+
+    String message = 'Unable to reset password. Please try again.';
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && body['error'] is String) {
+        message = body['error'] as String;
+      }
+    } catch (_) {}
+    throw AuthFlowException(message);
   }
 
   Future<Map<String, dynamic>> _checkRegistration({
@@ -255,10 +309,30 @@ class AuthService {
 
   Stream<AuthState> get authChanges => _client.auth.onAuthStateChange;
 
-  Future<void> signOut() => AuthSignOutCoordinator(
-    unregisterDeviceToken: NotificationService.instance.unregisterDeviceToken,
-    signOut: _client.auth.signOut,
-  ).run();
+  Future<void> signOut() async {
+    final user = _client.auth.currentUser;
+    final token = _client.auth.currentSession?.accessToken;
+    UserActivityTracker.instance.markExplicitSignOutStarted();
+    try {
+      if (user != null) {
+        await UserActivityTracker.instance.recordEvent(
+          userId: user.id,
+          eventType: 'logout',
+          accessToken: token,
+        );
+      }
+      await AuthSignOutCoordinator(
+        unregisterDeviceToken: NotificationService.instance.unregisterDeviceToken,
+        signOut: _client.auth.signOut,
+      ).run();
+    } finally {
+      // Clear flag slightly after auth state stream processes signedOut
+      Future.delayed(
+        const Duration(seconds: 2),
+        UserActivityTracker.instance.clearExplicitSignOutFlag,
+      );
+    }
+  }
 
   Future<void> logout() => signOut();
 }

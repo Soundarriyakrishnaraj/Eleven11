@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../badges/badge_service.dart';
+
 class GoalService {
   GoalService({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
@@ -50,6 +52,7 @@ class GoalService {
       'progress': 0,
       'status': 'active',
     });
+    BadgeService.notifyChanged();
   }
 
   Future<void> updateGoal({
@@ -64,6 +67,7 @@ class GoalService {
         })
         .eq('id', goalId)
         .eq('user_id', _userId);
+    BadgeService.notifyChanged();
   }
 
   // Automatically calculate goal progress from its checklist.
@@ -142,5 +146,6 @@ class GoalService {
         .delete()
         .eq('id', goalId)
         .eq('user_id', _userId);
+    BadgeService.notifyChanged();
   }
 }

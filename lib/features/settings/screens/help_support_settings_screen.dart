@@ -38,204 +38,6 @@ class _HelpSupportSettingsScreenState extends State<HelpSupportSettingsScreen> {
     },
   ];
 
-  void _showContactSupportDialog() {
-    final user = Supabase.instance.client.auth.currentUser;
-    final userId = user?.id ?? 'Not logged in';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text(
-          'Contact Support',
-          style: TextStyle(
-            color: Theme.of(ctx).colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Our team is dedicated to supporting your productivity journey.',
-              style: TextStyle(
-                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Theme.of(ctx).colorScheme.outline),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SUPPORT EMAIL',
-                    style: TextStyle(
-                      color: Theme.of(ctx).colorScheme.primary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  SelectableText(
-                    'support@eleven11.app',
-                    style: TextStyle(
-                      color: Theme.of(ctx).colorScheme.onSurface,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Response window: Within 24-48 business hours',
-                    style: TextStyle(
-                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'User Reference: ${userId.substring(0, userId.length > 8 ? 8 : userId.length)}...',
-              style: TextStyle(
-                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showReportProblemDialog() {
-    final controller = TextEditingController();
-    String category = 'Alarm / Notifications';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          title: Text(
-            'Report an Issue',
-            style: TextStyle(
-              color: Theme.of(dialogCtx).colorScheme.onSurface,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Category',
-                style: TextStyle(
-                  color: Theme.of(dialogCtx).colorScheme.onSurfaceVariant,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 4),
-              DropdownButton<String>(
-                value: category,
-                isExpanded: true,
-                dropdownColor: Theme.of(dialogCtx).colorScheme.surface,
-                underline: Container(
-                  height: 1,
-                  color: Theme.of(dialogCtx).colorScheme.primary,
-                ),
-                items:
-                    [
-                          'Alarm / Notifications',
-                          'Goal / Streak Tracking',
-                          'Theme & Appearance',
-                          'Authentication / Sync',
-                          'Other',
-                        ]
-                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                        .toList(),
-                onChanged: (val) {
-                  if (val != null) setDialogState(() => category = val);
-                },
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                maxLines: 4,
-                style: TextStyle(
-                  color: Theme.of(dialogCtx).colorScheme.onSurface,
-                  fontSize: 13,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Describe what happened...',
-                  hintStyle: TextStyle(
-                    color: Theme.of(dialogCtx).colorScheme.onSurfaceVariant,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: Theme.of(dialogCtx).colorScheme.outline,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: Theme.of(dialogCtx).colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(dialogCtx).colorScheme.primary,
-                foregroundColor: Theme.of(dialogCtx).colorScheme.onPrimary,
-              ),
-              onPressed: () {
-                final text = controller.text.trim();
-                Navigator.pop(dialogCtx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      text.isNotEmpty
-                          ? 'Thank you. Issue report received for $category.'
-                          : 'Report submitted.',
-                    ),
-                  ),
-                );
-              },
-              child: const Text('Submit'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _clearTemporaryCache() async {
     setState(() => _clearingCache = true);
     await Future.delayed(const Duration(milliseconds: 600));
@@ -284,7 +86,11 @@ class _HelpSupportSettingsScreenState extends State<HelpSupportSettingsScreen> {
             children: [
               Expanded(
                 child: InkWell(
-                  onTap: _showContactSupportDialog,
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/feedback',
+                    arguments: 'general',
+                  ),
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
                     padding: const EdgeInsets.all(16),
@@ -319,7 +125,7 @@ class _HelpSupportSettingsScreenState extends State<HelpSupportSettingsScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Email support team',
+                          'Direct support message',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: theme.colorScheme.onSurfaceVariant,
@@ -333,7 +139,11 @@ class _HelpSupportSettingsScreenState extends State<HelpSupportSettingsScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: InkWell(
-                  onTap: _showReportProblemDialog,
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/feedback',
+                    arguments: 'bug_report',
+                  ),
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
                     padding: const EdgeInsets.all(16),
@@ -518,11 +328,14 @@ class _HelpSupportSettingsScreenState extends State<HelpSupportSettingsScreen> {
           size: 18,
         ),
         const SizedBox(width: 10),
-        Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+            softWrap: true,
+          ),
         ),
-        const Spacer(),
+        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(

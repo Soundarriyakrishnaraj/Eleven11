@@ -1,4 +1,5 @@
 import 'package:eleven11/core/providers/theme_provider.dart';
+import 'package:eleven11/core/theme/eink_palette.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -167,6 +168,70 @@ void main() {
 
     expect(find.text('light'), findsOneWidget);
     notifier.dispose();
+  });
+
+  test('E-Ink Color Theme selection, presets, and preferences persistence', () async {
+    final notifier = ThemeNotifier();
+    await notifier.load();
+
+    expect(notifier.isEInkMode, false);
+
+    // Enable E-Ink mode
+    await notifier.setEInkMode(true);
+    expect(notifier.isEInkMode, true);
+    expect(notifier.appThemeMode, AppThemeMode.eink);
+
+    // Verify einkTheme properties
+    final einkTheme = notifier.einkTheme;
+    expect(einkTheme.brightness, Brightness.light);
+    expect(einkTheme.scaffoldBackgroundColor, notifier.einkPaper);
+    expect(einkTheme.colorScheme.onSurface, EInkPalette.classicKaleido.text1);
+
+    // Apply E-Ink preset
+    await notifier.applyEInkPreset(EInkPresets.warmPaper);
+    expect(notifier.einkAccent, EInkPresets.warmPaper.accentColor);
+    expect(notifier.einkPaper, EInkPresets.warmPaper.paperColor);
+
+    // Toggle ruled lines
+    await notifier.setEInkRuledLines(true);
+    expect(notifier.einkRuledLines, true);
+
+    // Persistence test
+    final restored = ThemeNotifier();
+    await restored.load();
+    expect(restored.isEInkMode, true);
+    expect(restored.einkAccent, EInkPresets.warmPaper.accentColor);
+    expect(restored.einkPaper, EInkPresets.warmPaper.paperColor);
+    expect(restored.einkRuledLines, true);
+
+    // Reset to defaults
+    await restored.resetEInkPalette();
+    expect(restored.einkAccent, EInkPalette.classicKaleido.accent1);
+
+    // Font style option tests
+    expect(restored.fontOption, FontStyleOption.normal);
+    expect(restored.isUppercaseMode, false);
+    expect(restored.fontFamily, null);
+
+    await restored.setFontStyle(FontStyleOption.customTTF);
+    expect(restored.fontOption, FontStyleOption.customTTF);
+    expect(restored.isUppercaseMode, true);
+    expect(restored.fontFamily, 'MyHandwriting');
+
+    final fontRestored = ThemeNotifier();
+    await fontRestored.load();
+    expect(fontRestored.fontOption, FontStyleOption.customTTF);
+    expect(fontRestored.isUppercaseMode, true);
+    expect(fontRestored.fontFamily, 'MyHandwriting');
+
+    // Switching back to normal mode turns off E-Ink
+    await restored.setMode(ThemeMode.dark);
+    expect(restored.isEInkMode, false);
+    expect(restored.mode, ThemeMode.dark);
+
+    notifier.dispose();
+    restored.dispose();
+    fontRestored.dispose();
   });
 }
 

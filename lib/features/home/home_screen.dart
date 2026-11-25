@@ -1,7 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/providers/theme_provider.dart';
 import '../authentication/logout_icon_button.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -128,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Text(
                               'ELEVEN11',
                               style: TextStyle(
-                                color: kSignatureOrange,
+                                color: Theme.of(context).colorScheme.primary,
                                 fontSize: 14,
                                 letterSpacing: 3,
                                 fontWeight: FontWeight.bold,
@@ -145,7 +144,24 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-                        const LogoutIconButton(),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (supabase.auth.currentUser?.id == '74aa5b3c-9b9f-440e-b104-98fbbe2b6e6a')
+                              IconButton(
+                                icon: Icon(
+                                  Icons.admin_panel_settings_rounded,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  size: 26,
+                                ),
+                                tooltip: 'Admin Panel',
+                                onPressed: () {
+                                  Navigator.pushNamed(context, '/admin');
+                                },
+                              ),
+                            const LogoutIconButton(),
+                          ],
+                        ),
                       ],
                     ),
 

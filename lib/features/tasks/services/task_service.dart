@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../badges/badge_service.dart';
 import '../../goals/services/goal_service.dart';
 
 abstract interface class TaskReader {
@@ -105,6 +106,7 @@ class TaskService implements TaskReader {
     if (goalId != null) {
       await _goalService.syncProgressFromTasks(goalId);
     }
+    BadgeService.notifyChanged();
 
     if (completed && countForStreak) {
       final localDate =

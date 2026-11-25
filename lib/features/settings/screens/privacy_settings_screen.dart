@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/security/app_lock_service.dart';
 import '../widgets/settings_tile.dart';
 
 class PrivacySettingsScreen extends StatefulWidget {
@@ -36,9 +37,8 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _appLockEnabled = prefs.getBool('privacy_app_lock_enabled') ?? false;
-      _autoLockTimeout =
-          prefs.getString('privacy_auto_lock_timeout') ?? '5 minutes';
+      _appLockEnabled = AppLockService.instance.isLockEnabled;
+      _autoLockTimeout = AppLockService.instance.timeout.label;
       _analyticsEnabled = prefs.getBool('privacy_analytics_enabled') ?? true;
       _personalizedInsights =
           prefs.getBool('privacy_personalized_insights') ?? true;
@@ -49,11 +49,6 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
   Future<void> _setBool(String key, bool val) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(key, val);
-  }
-
-  Future<void> _setString(String key, String val) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, val);
   }
 
   void _showPrivacyPolicy() {
@@ -268,54 +263,87 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                           style: TextStyle(fontSize: 12),
                         ),
                         value: _appLockEnabled,
-                        onChanged: (val) {
+                        onChanged: (val) async {
                           setState(() => _appLockEnabled = val);
-                          _setBool('privacy_app_lock_enabled', val);
+                          await AppLockService.instance.setLockEnabled(val);
                         },
                       ),
                       if (_appLockEnabled) ...[
                         Divider(height: 1, color: borderColor),
-                        ListTile(
-                          leading: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.lock_clock_outlined,
-                              color: accent,
-                              size: 20,
-                            ),
-                          ),
-                          title: const Text(
-                            'Auto-Lock Timeout',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          subtitle: Text(
-                            _autoLockTimeout,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          trailing: DropdownButton<String>(
-                            value: _autoLockTimeout,
-                            underline: const SizedBox(),
-                            dropdownColor: cardColor,
-                            items: _timeoutOptions.map((t) {
-                              return DropdownMenuItem(value: t, child: Text(t));
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => _autoLockTimeout = val);
-                                _setString('privacy_auto_lock_timeout', val);
-                              }
-                            },
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: accent.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.lock_clock_outlined,
+                                      color: accent,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Auto-Lock Timeout',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        Text(
+                                          _autoLockTimeout,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: borderColor),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    isExpanded: true,
+                                    value: _autoLockTimeout,
+                                    dropdownColor: cardColor,
+                                    items: _timeoutOptions.map((t) {
+                                      return DropdownMenuItem(value: t, child: Text(t));
+                                    }).toList(),
+                                    onChanged: (val) async {
+                                      if (val != null) {
+                                        setState(() => _autoLockTimeout = val);
+                                        final matched = AppLockTimeout.values.firstWhere(
+                                          (t) => t.label == val,
+                                          orElse: () => AppLockTimeout.immediately,
+                                        );
+                                        await AppLockService.instance.setTimeout(matched);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -450,6 +478,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Icon(
                             Icons.delete_forever_rounded,
@@ -457,12 +486,15 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                             size: 24,
                           ),
                           const SizedBox(width: 10),
-                          const Text(
-                            'Account Deletion & Data Erasure',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Colors.redAccent,
+                          const Expanded(
+                            child: Text(
+                              'Account Deletion & Data Erasure',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: Colors.redAccent,
+                              ),
+                              softWrap: true,
                             ),
                           ),
                         ],

@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/alarm_schedule_service.dart';
@@ -52,9 +53,6 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
     }
 
     try {
-      await _service.initialize();
-      await _service.restoreAlarms(userId);
-
       final alarms = await _service.getAlarms(userId);
 
       if (!mounted) return;
@@ -63,6 +61,9 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
         _alarms = alarms;
         _loading = false;
       });
+
+      // Sync/restore native alarm schedules in the background without blocking UI
+      _service.initialize().then((_) => _service.restoreAlarms(userId)).catchError((_) {});
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -136,15 +137,28 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
 
     bool vibrationEnabled = existing?.vibrationEnabled ?? true;
     bool soundEnabled = existing?.soundEnabled ?? true;
-    String? soundUri = existing?.soundUri;
-    String soundName =
-        existing?.soundName ?? AlarmAudioService.getSoundDisplayName(soundUri);
 
+    // Load user configured default alarm sound from settings if creating a new alarm
+    final prefs = await SharedPreferences.getInstance();
+    final defaultUri = prefs.getString('alarm_default_audio_uri') ??
+        prefs.getString('alarm_daily_audio_uri') ??
+        'builtin:classic';
+    final defaultName = prefs.getString('alarm_default_audio_name') ??
+        prefs.getString('alarm_daily_audio_name') ??
+        AlarmAudioService.getSoundDisplayName(defaultUri);
+
+    String? soundUri = existing?.soundUri ?? defaultUri;
+    String soundName =
+        existing?.soundName ?? (existing == null ? defaultName : AlarmAudioService.getSoundDisplayName(soundUri));
+
+    if (!mounted) return;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetContext) {
+        String? titleError;
+        bool daysError = false;
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return Padding(
@@ -166,10 +180,16 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
                     const SizedBox(height: 18),
                     TextField(
                       controller: titleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Alarm title',
+                      onChanged: (_) {
+                        if (titleError != null) {
+                          setSheetState(() => titleError = null);
+                        }
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Alarm title *',
                         hintText: 'Morning routine',
-                        border: OutlineInputBorder(),
+                        errorText: titleError,
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -201,9 +221,20 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Repeat',
+                      'Repeat *',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
+                    if (daysError)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Please select at least one repeat day',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 7,
@@ -216,6 +247,7 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
                           selected: selected,
                           onSelected: (value) {
                             setSheetState(() {
+                              daysError = false;
                               if (value) {
                                 selectedDays.add(day);
                               } else {
@@ -265,7 +297,8 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
                                     ? null
                                     : () async {
                                         await _previewSound(soundUri);
-                                        setSheetState(() {});
+                                        setSheetState(() {
+                              daysError = false;});
                                       },
                               ),
                               const Icon(Icons.chevron_right),
@@ -276,12 +309,14 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
                               currentUri: soundUri,
                               onSelected: (newUri, newName) {
                                 setSheetState(() {
+                              daysError = false;
                                   soundUri = newUri;
                                   soundName = newName;
                                 });
                               },
                             );
-                            setSheetState(() {});
+                            setSheetState(() {
+                              daysError = false;});
                           },
                         ),
                       ),
@@ -302,13 +337,11 @@ class _AlarmRemindersScreenState extends State<AlarmRemindersScreen> {
                         onPressed: () async {
                           final title = titleController.text.trim();
 
-                          if (title.isEmpty) {
-                            _showMessage('Enter an alarm title.');
-                            return;
-                          }
-
-                          if (selectedDays.isEmpty) {
-                            _showMessage('Select at least one repeat day.');
+                          if (title.isEmpty || selectedDays.isEmpty) {
+                            setSheetState(() {
+                              titleError = title.isEmpty ? 'Please fill this box' : null;
+                              daysError = selectedDays.isEmpty;
+                            });
                             return;
                           }
 

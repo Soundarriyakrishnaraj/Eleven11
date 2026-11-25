@@ -3,17 +3,52 @@ package com.eleven11.eleven11
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.provider.OpenableColumns
 import android.database.Cursor
-import io.flutter.embedding.android.FlutterActivity
+import android.view.WindowManager
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
 
     private val channelName = "com.eleven11/audio_picker"
     private val requestCode = 11111
     private var pendingResult: MethodChannel.Result? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        turnScreenOnAndKeyguard()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        turnScreenOnAndKeyguard()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        turnScreenOnAndKeyguard()
+    }
+
+    private fun turnScreenOnAndKeyguard() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -47,9 +82,46 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                "saveToDownloads" -> {
+                    val name = call.argument<String>("name")
+                    val bytes = call.argument<ByteArray>("bytes")
+                    val mime = call.argument<String>("mime") ?: "application/octet-stream"
+                    if (name == null || bytes == null) {
+                        result.error("BAD_ARGS", "Missing file name or data.", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        result.success(saveToDownloads(name, bytes, mime))
+                    } catch (e: Exception) {
+                        result.error("SAVE_ERROR", e.message, null)
+                    }
+                }
+
                 else -> result.notImplemented()
             }
         }
+    }
+
+    /** Saves a file into the public Downloads folder; returns a readable location. */
+    private fun saveToDownloads(name: String, bytes: ByteArray, mime: String): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, mime)
+                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, "Download")
+            }
+            val uri = contentResolver.insert(
+                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+            ) ?: throw Exception("Could not create file in Downloads.")
+            contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                ?: throw Exception("Could not write file.")
+            return "Downloads/$name"
+        }
+        val dir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+            ?: throw Exception("Storage unavailable.")
+        val file = java.io.File(dir, name)
+        file.writeBytes(bytes)
+        return file.absolutePath
     }
 
     @Deprecated("Deprecated in Android API")

@@ -115,6 +115,9 @@ class _StreakScreenState extends State<StreakScreen> {
                 const SizedBox(height: 12),
                 _weeklyCard(),
 
+                const SizedBox(height: 16),
+                _badgeCollectionCard(data.overall),
+
                 const SizedBox(height: 20),
                 Center(
                   child: Text(
@@ -415,6 +418,130 @@ class _StreakScreenState extends State<StreakScreen> {
         border: Border.all(color: Theme.of(context).colorScheme.outline),
       ),
       child: child,
+    );
+  }
+
+  Widget _badgeCollectionCard(int currentStreak) {
+    final badges = [
+      (title: '3-DAY SPARK', days: 3, icon: Icons.bolt, desc: 'Ignite your daily journey'),
+      (title: '7-DAY FLAME', days: 7, icon: Icons.local_fire_department, desc: 'A full week of consistency'),
+      (title: '14-DAY BLAZE', days: 14, icon: Icons.whatshot, desc: 'Two weeks unbroken commitment'),
+      (title: '30-DAY MASTER', days: 30, icon: Icons.military_tech, desc: 'A month of unstoppable progress'),
+      (title: '60-DAY TITAN', days: 60, icon: Icons.shield, desc: 'Forged through iron discipline'),
+      (title: '100-DAY LEGEND', days: 100, icon: Icons.workspace_premium, desc: 'Elite habit status unlocked'),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.emoji_events_outlined, color: orange, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'BADGE COLLECTION',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${badges.where((b) => currentStreak >= b.days).length}/${badges.length} UNLOCKED',
+                style: TextStyle(
+                  color: orange,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.74,
+            ),
+            itemCount: badges.length,
+            itemBuilder: (context, index) {
+              final badge = badges[index];
+              final unlocked = currentStreak >= badge.days;
+              return Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: unlocked
+                      ? orange.withValues(alpha: 0.12)
+                      : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: unlocked ? orange.withValues(alpha: 0.5) : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                    width: unlocked ? 1.5 : 1,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: unlocked
+                            ? orange.withValues(alpha: 0.2)
+                            : Theme.of(context).colorScheme.surfaceContainerHighest,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        badge.icon,
+                        color: unlocked ? orange : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      badge.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: unlocked
+                            ? Theme.of(context).colorScheme.onSurface
+                            : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      unlocked ? '${badge.days}D REACHED' : '${badge.days} DAYS',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: unlocked ? orange : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

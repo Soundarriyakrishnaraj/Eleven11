@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../authentication/auth_service.dart';
+import '../../calendar/services/google_calendar_service.dart';
 import '../widgets/settings_tile.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
@@ -22,10 +23,112 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   bool _loading = true;
   bool _saving = false;
 
+  final GoogleCalendarService _calendarService = GoogleCalendarService();
+  GoogleCalendarStatus _calendarStatus = GoogleCalendarStatus.disconnected;
+  bool _calendarLoading = true;
+  bool _calendarActionInProgress = false;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadCalendarStatus();
+  }
+
+  @override
+  void dispose() {
+    _calendarService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCalendarStatus() async {
+    try {
+      final status = await _calendarService.getStatus();
+      if (mounted) {
+        setState(() {
+          _calendarStatus = status;
+          _calendarLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _calendarLoading = false);
+      }
+    }
+  }
+
+  Future<void> _connectCalendar() async {
+    setState(() => _calendarActionInProgress = true);
+    try {
+      await _calendarService.startAuthorization(
+        onCompleted: (status) {
+          if (mounted) {
+            setState(() {
+              _calendarStatus = status;
+              _calendarActionInProgress = false;
+            });
+            _snack('Google Calendar connected: ${status.email ?? ''}');
+          }
+        },
+        onError: (err) {
+          if (mounted) {
+            setState(() => _calendarActionInProgress = false);
+            _snack(err);
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _calendarActionInProgress = false);
+        _snack('$e');
+      }
+    }
+  }
+
+  Future<void> _disconnectCalendar() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _card,
+        title: const Text('Disconnect Calendar?'),
+        content: const Text(
+          'Eleven11 will no longer synchronize your events with Google Calendar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _calendarActionInProgress = true);
+    try {
+      await _calendarService.disconnect();
+      if (mounted) {
+        setState(() {
+          _calendarStatus = GoogleCalendarStatus.disconnected;
+          _calendarActionInProgress = false;
+        });
+        _snack('Google Calendar disconnected.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _calendarActionInProgress = false);
+        _snack('$e');
+      }
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -410,6 +513,104 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     }
   }
 
+  Widget _buildCalendarTile() {
+    final connected = _calendarStatus.connected;
+    final email = _calendarStatus.email;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.calendar_month_rounded,
+                  color: _orange,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Google Calendar',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _calendarLoading
+                          ? 'Checking status...'
+                          : connected
+                              ? (email ?? 'Connected')
+                              : 'Not connected',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: connected
+                            ? _orange
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_calendarLoading || _calendarActionInProgress)
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _orange,
+                  ),
+                )
+              else if (connected)
+                TextButton(
+                  onPressed: _disconnectCalendar,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                  child: const Text('Disconnect'),
+                )
+              else
+                FilledButton(
+                  onPressed: _connectCalendar,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _orange,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text(
+                    'Connect',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -523,6 +724,12 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   subtitle: 'Update your login password',
                   onTap: _changePassword,
                 ),
+
+                const SizedBox(height: 24),
+                const SettingsSectionHeader('Integrations'),
+                const SizedBox(height: 8),
+
+                _buildCalendarTile(),
 
                 const SizedBox(height: 28),
                 if (_saving)

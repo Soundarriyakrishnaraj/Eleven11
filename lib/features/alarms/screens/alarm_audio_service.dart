@@ -217,10 +217,10 @@ class AlarmAudioService {
   }
 
   // Preview selected audio
-  Future<void> previewAudio(String uri) async {
+  Future<void> previewAudio(String uri, {bool loop = false}) async {
     await stopPreview();
 
-    await _player.setReleaseMode(ReleaseMode.stop);
+    await _player.setReleaseMode(loop ? ReleaseMode.loop : ReleaseMode.stop);
 
     try {
       if (uri.startsWith('builtin:')) {
@@ -239,6 +239,29 @@ class AlarmAudioService {
     } catch (e) {
       debugPrint('Alarm audio preview error: $e');
       rethrow;
+    }
+  }
+
+  // Play alarm sound continuously in loop until stopped
+  Future<void> playAlarmLoop(String? uri) async {
+    await stopPreview();
+    await _player.setReleaseMode(ReleaseMode.loop);
+
+    try {
+      final targetUri = (uri != null && uri.isNotEmpty) ? uri : 'builtin:classic';
+      if (targetUri.startsWith('builtin:')) {
+        final soundId = targetUri.substring('builtin:'.length);
+        final sound = builtInSounds.firstWhere(
+          (item) => item.id == soundId,
+          orElse: () => builtInSounds.first,
+        );
+        await _player.play(BytesSource(_createWav(sound.notes)));
+        return;
+      }
+
+      await _player.play(UrlSource(targetUri));
+    } catch (e) {
+      debugPrint('Alarm audio play loop error: $e');
     }
   }
 

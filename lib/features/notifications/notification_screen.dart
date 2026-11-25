@@ -353,14 +353,6 @@ class _NotificationScreenState extends State<NotificationScreen>
               tooltip: 'Mark all as read',
               onPressed: _bulkActionInProgress ? null : _markAllRead,
             ),
-          IconButton(
-            icon: Icon(
-              Icons.tune,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            tooltip: 'Notification preferences',
-            onPressed: _openPreferences,
-          ),
           PopupMenuButton<String>(
             icon: Icon(
               Icons.more_vert,
@@ -449,6 +441,8 @@ class _NotificationScreenState extends State<NotificationScreen>
             child: TabBar(
               controller: _tabController,
               isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              padding: EdgeInsets.zero,
               indicator: BoxDecoration(
                 color: _accent,
                 borderRadius: BorderRadius.circular(10),

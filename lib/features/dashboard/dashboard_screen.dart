@@ -3,15 +3,20 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/providers/theme_provider.dart';
 import '../authentication/logout_icon_button.dart';
 import '../alarms/screens/alarm_reminders_screen.dart';
 
 import '../goals/screens/goals_screen.dart';
 import '../tasks/screens/tasks_screen.dart';
+import '../notes/screens/notes_screen.dart';
+import '../motivation/screens/motivation_screen.dart';
+import '../calendar/screens/calendar_screen.dart';
 import '../streaks/streak_screen.dart';
 import '../streaks/streak_service.dart';
 import '../achievements/achievements_screen.dart';
+import '../badges/badge_shelf.dart';
+import 'daily_quotes.dart';
+import 'home_quick_todo.dart';
 import '../notifications/notification_screen.dart';
 import '../notifications/notification_service.dart';
 import '../settings/screens/account_settings_screen.dart';
@@ -25,7 +30,9 @@ import '../settings/screens/help_support_settings_screen.dart';
 import '../settings/screens/about_settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.initialLandingScreen});
+
+  final String? initialLandingScreen;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -51,17 +58,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   int _unreadNotificationsCount = 0;
   StreamSubscription<int>? _unreadSub;
+  int _selectedTab = 0;
 
   @override
   void initState() {
     super.initState();
     _loadAchievementData();
     _loadStreakData();
+    _openInitialLandingIfNeeded();
     _unreadNotificationsCount = NotificationService.instance.currentUnreadCount;
     _unreadSub = NotificationService.instance.unreadCountStream.listen((count) {
       if (mounted) setState(() => _unreadNotificationsCount = count);
     });
     NotificationService.instance.refreshUnreadCount();
+    // Proactively request notification and alarm permissions on dashboard launch
+    unawaited(NotificationService.instance.requestAlarmPermissions());
+  }
+
+  static bool _didOpenInitialLanding = false;
+
+  void _openInitialLandingIfNeeded() {
+    if (_didOpenInitialLanding) return;
+    _didOpenInitialLanding = true;
+    final target = widget.initialLandingScreen;
+    if (target == null || target == 'Dashboard') return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Widget? page;
+      switch (target) {
+        case 'Motivation':
+          page = const MotivationScreen();
+          break;
+        case 'Daily To-do':
+          page = const TasksScreen();
+          break;
+        case 'Goals':
+          page = const GoalsScreen();
+          break;
+      }
+      if (page != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => page!));
+      }
+    });
   }
 
   @override
@@ -172,7 +211,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -213,6 +252,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _open(context, const TasksScreen());
+                },
+              ),
+              const SizedBox(height: 12),
+              _optionTile(
+                icon: Icons.note_alt_outlined,
+                title: 'Notes',
+                subtitle: 'Write formatted notes',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _open(context, const NotesScreen());
+                },
+              ),
+              const SizedBox(height: 12),
+              _optionTile(
+                icon: Icons.event_outlined,
+                title: 'Event',
+                subtitle: 'Schedule on your calendar',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _open(context, const CalendarScreen());
                 },
               ),
             ],
@@ -263,487 +322,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // CURRENT STREAK: STATIC CARD
-  Widget _currentStreakCard() {
-    return Expanded(
-      flex: 1,
-      child: Container(
-        height: 158,
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(Icons.local_fire_department_rounded, color: orange, size: 27),
-            if (streakLoading)
-              SizedBox(
-                height: 30,
-                width: 30,
-                child: CircularProgressIndicator(color: orange, strokeWidth: 2),
-              )
-            else
-              Text(
-                '${streakData?.overall ?? 0}',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'CURRENT',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    letterSpacing: 1,
-                  ),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  'Streak',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // LONGEST STREAK: WIDE CLICKABLE CARD
-  Widget _longestStreakCard() {
-    return Expanded(
-      flex: 2,
-      child: InkWell(
-        onTap: () => _open(context, const StreakScreen()),
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          height: 158,
-          padding: const EdgeInsets.all(17),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
-                Theme.of(context).colorScheme.surface,
-                Theme.of(context).colorScheme.surface,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: orange.withValues(alpha: 0.55)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.emoji_events_rounded, color: orange, size: 26),
-                  const Spacer(),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    size: 14,
-                  ),
-                ],
-              ),
-              if (streakLoading)
-                SizedBox(
-                  height: 30,
-                  width: 30,
-                  child: CircularProgressIndicator(
-                    color: orange,
-                    strokeWidth: 2,
-                  ),
-                )
-              else
-                Text(
-                  '${streakData?.overallLongest ?? 0}',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontSize: 35,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'LONGEST STREAK',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  SizedBox(height: 3),
-                  Text(
-                    'Your personal best',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _streakSection() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _currentStreakCard(),
-        const SizedBox(width: 12),
-        _longestStreakCard(),
-      ],
-    );
-  }
-
-  // ACHIEVEMENTS
-  Widget _achievementSection() {
-    final double progress = totalAchievements == 0
-        ? 0.0
-        : (unlockedCount / totalAchievements).clamp(0.0, 1.0).toDouble();
-
-    return InkWell(
-      onTap: () => _open(context, const AchievementsScreen()),
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: LinearGradient(
-            colors: [
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
-              Theme.of(context).colorScheme.surface,
-              Theme.of(context).colorScheme.surface,
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          border: Border.all(color: orange.withValues(alpha: 0.45)),
-          boxShadow: [
-            BoxShadow(
-              color: orange.withValues(alpha: 0.08),
-              blurRadius: 18,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  height: 46,
-                  width: 46,
-                  decoration: BoxDecoration(
-                    color: orange.withValues(alpha: 0.17),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(
-                    Icons.emoji_events_rounded,
-                    color: orange,
-                    size: 27,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'YOUR ACHIEVEMENTS',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Every milestone tells your story.',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.arrow_forward_ios, color: orange, size: 16),
-              ],
-            ),
-            const SizedBox(height: 24),
-            if (statsLoading)
-              Center(
-                child: CircularProgressIndicator(color: orange, strokeWidth: 2),
-              )
-            else ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '$unlockedCount',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 39,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 7),
-                    child: Text(
-                      ' / $totalAchievements unlocked',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${(progress * 100).round()}%',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 11),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 9,
-                  backgroundColor: Theme.of(context).colorScheme.onSurface
-                      .withValues(alpha: 0.12),
-                  color: orange,
-                ),
-              ),
-              const SizedBox(height: 17),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.stars_rounded,
-                    color: kSignatureGold,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 7),
-                  Text(
-                    '$totalPoints POINTS EARNED',
-                    style: const TextStyle(
-                      color: kSignatureGold,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'VIEW ALL',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // BADGE COLLECTION
-  Widget _badgeSection() {
-    return InkWell(
-      onTap: () => _open(context, const AchievementsScreen()),
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(17, 18, 17, 17),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.military_tech_rounded, color: orange, size: 25),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(
-                    'BADGE COLLECTION',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-                Text(
-                  'SEE ALL →',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            if (statsLoading)
-              Center(
-                child: CircularProgressIndicator(color: orange, strokeWidth: 2),
-              )
-            else if (earnedBadges.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 22),
-                child: Column(
-                  children: [
-                    Text('🔒', style: TextStyle(fontSize: 34)),
-                    SizedBox(height: 9),
-                    Text(
-                      'Your first badge is waiting!',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 5),
-                    Text(
-                      'Complete a goal to earn your first reward.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              SizedBox(
-                height: 112,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: earnedBadges.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 13),
-                  itemBuilder: (context, index) {
-                    final badge = earnedBadges[index];
-                    final icon = badge['icon_url']?.toString() ?? '🏅';
-                    final name = badge['name']?.toString() ?? 'Badge';
-
-                    return SizedBox(
-                      width: 82,
-                      child: Column(
-                        children: [
-                          Container(
-                            height: 65,
-                            width: 65,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  Theme.of(context).colorScheme.primary
-                                      .withValues(alpha: 0.5),
-                                  Theme.of(context).colorScheme.surface,
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              border: Border.all(
-                                color: orange.withValues(alpha: 0.7),
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Text(
-                              icon,
-                              style: const TextStyle(fontSize: 29),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            name,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.workspace_premium, color: orange, size: 17),
-                const SizedBox(width: 7),
-                Text(
-                  '$unlockedCount badges collected',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '$totalPoints PTS',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _workspaceTile({
     required IconData icon,
     required String title,
@@ -755,8 +333,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Container(
-          height: 125,
-          padding: const EdgeInsets.all(16),
+          constraints: const BoxConstraints(minHeight: 110),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: cardColor,
             borderRadius: BorderRadius.circular(18),
@@ -766,19 +344,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: orange, size: 32),
-              const SizedBox(height: 12),
+              Icon(icon, color: orange, size: 28),
+              const SizedBox(height: 10),
               Text(
                 title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurface,
                   fontWeight: FontWeight.bold,
-                  fontSize: 15,
+                  fontSize: 14,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               Text(
                 subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontSize: 11,
@@ -796,7 +378,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String label,
     required VoidCallback onTap,
     int badgeCount = 0,
+    bool isSelected = false,
   }) {
+    final itemColor = isSelected
+        ? orange
+        : Theme.of(context).colorScheme.onSurfaceVariant;
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -808,7 +394,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Icon(
                   icon,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: itemColor,
                   size: 23,
                 ),
                 if (badgeCount > 0)
@@ -830,7 +416,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(
               label,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: itemColor,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 fontSize: 10,
               ),
             ),
@@ -843,159 +430,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        title: const Text(
-          'ELEVEN11',
-          style: TextStyle(
-            color: kSignatureOrange,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 3,
-          ),
-        ),
-        centerTitle: true,
-        actions: [const LogoutIconButton(), const SizedBox(width: 8)],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 30),
-        children: [
-          Text(
-            'YOUR DASHBOARD',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Make today count.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 27,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            'Stay disciplined. Keep moving forward.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 22),
-
-          // MOTIVATION
-          Container(
-            padding: const EdgeInsets.all(19),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.18),
-                  Theme.of(context).colorScheme.surface,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+      appBar: _selectedTab == 0
+          ? AppBar(
+              elevation: 0,
+              title: Text(
+                'ELEVEN11',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 3,
+                ),
               ),
-              border: Border.all(color: orange.withValues(alpha: 0.4)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.format_quote, color: orange, size: 25),
-                    SizedBox(width: 7),
-                    Text(
-                      "TODAY'S MOTIVATION",
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                        fontSize: 11,
-                      ),
+              centerTitle: true,
+              actions: [
+                if (Supabase.instance.client.auth.currentUser?.id ==
+                    '74aa5b3c-9b9f-440e-b104-98fbbe2b6e6a')
+                  IconButton(
+                    icon: Icon(
+                      Icons.admin_panel_settings_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 26,
                     ),
-                  ],
-                ),
-                SizedBox(height: 13),
-                Text(
-                  'Your only limit is the one you refuse to challenge.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
+                    tooltip: 'Admin Panel',
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/admin');
+                    },
                   ),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'DISCIPLINE. FOCUS. ACHIEVE.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 10,
-                    letterSpacing: 1,
-                  ),
-                ),
+                const LogoutIconButton(),
+                const SizedBox(width: 8),
               ],
-            ),
-          ),
-
-          const SizedBox(height: 25),
-
-          _sectionTitle('YOUR STREAKS'),
-          const SizedBox(height: 13),
-          _streakSection(),
-
-          const SizedBox(height: 27),
-
-          _sectionTitle('YOUR ACHIEVEMENTS'),
-          const SizedBox(height: 13),
-          _achievementSection(),
-
-          const SizedBox(height: 17),
-
-          _badgeSection(),
-
-          const SizedBox(height: 27),
-
-          _sectionTitle('YOUR WORKSPACE'),
-          const SizedBox(height: 13),
-          Row(
-            children: [
-              _workspaceTile(
-                icon: Icons.flag_outlined,
-                title: 'My Goals',
-                subtitle: 'Plan your future',
-                onTap: () => _open(context, const GoalsScreen()),
-              ),
-              const SizedBox(width: 12),
-              _workspaceTile(
-                icon: Icons.checklist_rounded,
-                title: 'Daily To-do',
-                subtitle: 'Win your day',
-                onTap: () => _open(context, const TasksScreen()),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 28),
-
-          Center(
-            child: Text(
-              'DISCIPLINE. FOCUS. ACHIEVE.',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-                fontSize: 11,
-              ),
-            ),
-          ),
+            )
+          : null,
+      body: IndexedStack(
+        index: _selectedTab,
+        children: [
+          _buildHomeBody(context),
+          const AlarmRemindersScreen(),
+          const NotificationScreen(),
+          const AppSettingsScreen(),
         ],
       ),
-
       bottomNavigationBar: SafeArea(
         child: Container(
           height: 68,
@@ -1007,12 +481,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: Row(
             children: [
-              _bottomItem(icon: Icons.home_filled, label: 'Home', onTap: () {}),
               _bottomItem(
-                icon: Icons.notifications_outlined,
-                label: 'Notifications',
-                badgeCount: _unreadNotificationsCount,
-                onTap: () => _open(context, const NotificationScreen()),
+                icon: Icons.home_filled,
+                label: 'Home',
+                isSelected: _selectedTab == 0,
+                onTap: () => setState(() => _selectedTab = 0),
+              ),
+              _bottomItem(
+                icon: Icons.alarm_outlined,
+                label: 'Alarms',
+                isSelected: _selectedTab == 1,
+                onTap: () => setState(() => _selectedTab = 1),
               ),
               Expanded(
                 child: Center(
@@ -1030,14 +509,200 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               _bottomItem(
-                icon: Icons.alarm_outlined,
-                label: 'Alarms',
-                onTap: () => _open(context, const AlarmRemindersScreen()),
+                icon: Icons.notifications_outlined,
+                label: 'Notifications',
+                badgeCount: _unreadNotificationsCount,
+                isSelected: _selectedTab == 2,
+                onTap: () => setState(() => _selectedTab = 2),
               ),
               _bottomItem(
                 icon: Icons.settings_outlined,
                 label: 'Settings',
-                onTap: () => _open(context, const AppSettingsScreen()),
+                isSelected: _selectedTab == 3,
+                onTap: () => setState(() => _selectedTab = 3),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeBody(BuildContext context) {
+    final currentStreak = streakData?.overall ?? 0;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 36),
+      children: [
+        // 1. TODAY'S MOTIVATION
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.14),
+                Theme.of(context).colorScheme.surface,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: orange.withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.format_quote, color: orange, size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    "TODAY'S MOTIVATION",
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                quoteForDate(DateTime.now()),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // 2. GENERAL TO-DO LIST
+        const HomeQuickTodo(),
+
+        const SizedBox(height: 24),
+
+        // 3. YOUR WORKSPACE (Goals, Daily To-do, Calendar, Notes)
+        _sectionTitle('YOUR WORKSPACE'),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _workspaceTile(
+              icon: Icons.flag_outlined,
+              title: 'My Goals',
+              subtitle: 'Plan your future',
+              onTap: () => _open(context, const GoalsScreen()),
+            ),
+            const SizedBox(width: 12),
+            _workspaceTile(
+              icon: Icons.checklist_rounded,
+              title: 'Daily To-do',
+              subtitle: 'Win your day',
+              onTap: () => _open(context, const TasksScreen()),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _workspaceTile(
+              icon: Icons.calendar_month_outlined,
+              title: 'Calendar',
+              subtitle: 'Schedule & events',
+              onTap: () => _open(context, const CalendarScreen()),
+            ),
+            const SizedBox(width: 12),
+            _workspaceTile(
+              icon: Icons.note_alt_outlined,
+              title: 'Notes',
+              subtitle: 'Rich text notes',
+              onTap: () => _open(context, const NotesScreen()),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 28),
+
+        // 3. STREAKS & ACHIEVEMENTS IN PARALLEL, BADGES ON NEXT LINE
+        _sectionTitle('PROGRESS'),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _compactStatCard(
+                icon: Icons.local_fire_department_rounded,
+                label: 'Streaks',
+                value: streakLoading ? '—' : '$currentStreak d',
+                onTap: () => _open(context, const StreakScreen()),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _compactStatCard(
+                icon: Icons.emoji_events_outlined,
+                label: 'Achievements',
+                value: statsLoading ? '—' : '$unlockedCount/$totalAchievements',
+                onTap: () => _open(context, const AchievementsScreen()),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _staticBadgeShelf(),
+      ],
+    );
+  }
+
+  Widget _staticBadgeShelf() => BadgeShelf(cardColor: cardColor, accent: orange);
+
+  Widget _compactStatCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Theme.of(context).colorScheme.outline),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: orange, size: 22),
+              const SizedBox(height: 6),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
               ),
             ],
           ),
@@ -1047,27 +712,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// TEMPORARY ALARM CENTRE
-class AlarmCentreScreen extends StatelessWidget {
-  const AlarmCentreScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('ALARM & REMINDERS')),
-      body: Center(
-        child: Text(
-          'Your alarms and reminders will appear here.',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// TEMPORARY SETTINGS
+// SETTINGS
 class AppSettingsScreen extends StatelessWidget {
   const AppSettingsScreen({super.key});
 
@@ -1193,6 +838,57 @@ class AppSettingsScreen extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const AboutSettingsScreen()),
             ),
           ),
+          const SizedBox(height: 32),
+          // SIGN OUT ACTION AT THE END OF SETTINGS
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.error.withValues(alpha: 0.6),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Confirm Sign Out'),
+                    content: const Text('Are you sure you want to sign out of Eleven11?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Theme.of(ctx).colorScheme.error,
+                          foregroundColor: Theme.of(ctx).colorScheme.onError,
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Sign Out'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true && context.mounted) {
+                  await Supabase.instance.client.auth.signOut();
+                  if (context.mounted) {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  }
+                }
+              },
+              icon: const Icon(Icons.logout_rounded, size: 20),
+              label: const Text(
+                'SIGN OUT',
+                style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+              ),
+            ),
+          ),
           const SizedBox(height: 30),
         ],
       ),
@@ -1299,3 +995,4 @@ class _Tile extends StatelessWidget {
     );
   }
 }
+

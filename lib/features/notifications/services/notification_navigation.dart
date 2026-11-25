@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../alarms/screens/alarm_reminders_screen.dart';
+import '../../alarms/screens/alarm_ringing_screen.dart';
 import '../../dashboard/dashboard_screen.dart';
 import '../../goals/screens/goals_screen.dart';
 import '../../motivation/screens/motivation_screen.dart';
@@ -26,7 +27,11 @@ class NotificationNavigation {
         routeData['route']?.toString().toLowerCase() ??
         routeData['screen']?.toString().toLowerCase();
 
-    if (explicitTarget == 'alarm' || explicitTarget == 'alarms') {
+    // If an active alarm notification is triggered or tapped, route to the full-screen Alarm Ringing interface
+    if (explicitTarget == 'alarm' || explicitTarget == 'alarms' || category == NotificationCategory.alarm) {
+      if (routeData.containsKey('alarmId') || routeData.containsKey('alarmInstanceId')) {
+        return AlarmRingingScreen(payload: routeData);
+      }
       return const AlarmRemindersScreen();
     }
     if (explicitTarget == 'task' || explicitTarget == 'tasks') {

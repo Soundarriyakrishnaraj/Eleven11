@@ -38,13 +38,15 @@ void main() {
       ),
     );
 
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.scrollUntilVisible(
+      find.text('APPLY ACCENT COLOR'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     final hexField = find.byType(TextField);
     await tester.enterText(hexField, '2962FF');
     expect(tester.widget<TextField>(hexField).controller!.text, '2962FF');
-    await tester.ensureVisible(find.text('APPLY ACCENT COLOR'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('APPLY ACCENT COLOR'));
     await tester.pumpAndSettle();
     expect(notifier.accent, const Color(0xFF2962FF));
@@ -66,7 +68,11 @@ void main() {
     await tester.pump();
 
     expect(tester.widget<TextField>(hexField).controller!.text, '#0A141E');
-    await tester.ensureVisible(find.text('APPLY ACCENT COLOR'));
+    await tester.scrollUntilVisible(
+      find.text('APPLY ACCENT COLOR'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('APPLY ACCENT COLOR'));
     await tester.pumpAndSettle();

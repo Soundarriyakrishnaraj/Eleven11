@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../core/providers/theme_provider.dart';
 import '../widgets/settings_tile.dart';
+import 'eink_color_settings_screen.dart';
 
 class AppearanceSettingsScreen extends StatefulWidget {
   const AppearanceSettingsScreen({super.key});
@@ -13,6 +14,7 @@ class AppearanceSettingsScreen extends StatefulWidget {
 
 class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   late ThemeMode _currentMode;
+  late bool _isEInk;
   late Color _selectedAccent;
   late TextEditingController _hexController;
 
@@ -36,6 +38,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   void initState() {
     super.initState();
     _currentMode = ThemeNotifier.instance.mode;
+    _isEInk = ThemeNotifier.instance.isEInkMode;
     _selectedAccent = ThemeNotifier.instance.accent;
 
     _r = (_selectedAccent.r * 255).round().clamp(0, 255);
@@ -97,8 +100,16 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   }
 
   Future<void> _setThemeMode(ThemeMode mode) async {
-    setState(() => _currentMode = mode);
+    setState(() {
+      _currentMode = mode;
+      _isEInk = false;
+    });
     await ThemeNotifier.instance.setMode(mode);
+  }
+
+  Future<void> _enableEInkTheme() async {
+    setState(() => _isEInk = true);
+    await ThemeNotifier.instance.setEInkMode(true);
   }
 
   Future<void> _applyAccentColor(Color color) async {
@@ -124,6 +135,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     await ThemeNotifier.instance.setMode(ThemeMode.dark);
     setState(() {
       _currentMode = ThemeMode.dark;
+      _isEInk = false;
       _selectedAccent = kDefaultAccent;
       _r = (_selectedAccent.r * 255).round().clamp(0, 255);
       _g = (_selectedAccent.g * 255).round().clamp(0, 255);
@@ -165,10 +177,20 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
           _buildLivePreviewCard(cardColor, borderColor),
           const SizedBox(height: 24),
 
+          // FONT STYLE SELECTOR
+          const SettingsSectionHeader('FONT STYLE'),
+          const SizedBox(height: 6),
+          _buildFontStyleSelector(cardColor, borderColor),
+          const SizedBox(height: 24),
+
           // THEME MODE
           const SettingsSectionHeader('THEME MODE'),
           const SizedBox(height: 6),
           _buildThemeModeSelector(cardColor, borderColor),
+          const SizedBox(height: 24),
+
+          // E-INK CUSTOMIZATION BANNER (if active or to explore)
+          _buildEInkAccessCard(cardColor, borderColor),
           const SizedBox(height: 24),
 
           // PRESET ACCENT COLORS
@@ -227,6 +249,82 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
             ),
           ),
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFontStyleSelector(Color cardColor, Color borderColor) {
+    final currentOption = ThemeNotifier.instance.fontOption;
+    final primaryAccent = Theme.of(context).colorScheme.primary;
+
+    return Material(
+      color: cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: borderColor),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(
+              Icons.font_download_outlined,
+              color: currentOption == FontStyleOption.normal
+                  ? primaryAccent
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            title: const Text(
+              'Normal (System Default)',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            subtitle: const Text(
+              'Standard system font with regular case rendering',
+              style: TextStyle(fontSize: 11.5),
+            ),
+            trailing: currentOption == FontStyleOption.normal
+                ? Icon(Icons.check_circle_rounded, color: primaryAccent, size: 22)
+                : Icon(
+                    Icons.circle_outlined,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 22,
+                  ),
+            onTap: () async {
+              await ThemeNotifier.instance.setFontStyle(FontStyleOption.normal);
+              setState(() {});
+            },
+          ),
+          Divider(height: 1, color: borderColor),
+          ListTile(
+            leading: Icon(
+              Icons.draw_outlined,
+              color: currentOption == FontStyleOption.customTTF
+                  ? primaryAccent
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            title: const Text(
+              'Custom TTF (Handwriting UPPERCASE)',
+              style: TextStyle(
+                fontFamily: 'MyHandwriting',
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            subtitle: const Text(
+              'MyHandwriting.ttf font with uppercase UI presentation',
+              style: TextStyle(fontSize: 11.5),
+            ),
+            trailing: currentOption == FontStyleOption.customTTF
+                ? Icon(Icons.check_circle_rounded, color: primaryAccent, size: 22)
+                : Icon(
+                    Icons.circle_outlined,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 22,
+                  ),
+            onTap: () async {
+              await ThemeNotifier.instance.setFontStyle(FontStyleOption.customTTF);
+              setState(() {});
+            },
+          ),
         ],
       ),
     );
@@ -384,8 +482,71 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
             icon: Icons.brightness_auto_outlined,
             mode: ThemeMode.system,
           ),
+          Divider(height: 1, color: borderColor),
+          _einkThemeRadioTile(),
         ],
       ),
+    );
+  }
+
+  Widget _einkThemeRadioTile() {
+    final selected = _isEInk;
+    final primaryAccent = Theme.of(context).colorScheme.primary;
+
+    return ListTile(
+      leading: Icon(
+        Icons.auto_stories_outlined,
+        color: selected
+            ? primaryAccent
+            : Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+      title: const Row(
+        children: [
+          Text(
+            'E-Ink Color',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          SizedBox(width: 8),
+          Chip(
+            label: Text(
+              'NEW',
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+            ),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ],
+      ),
+      subtitle: const Text(
+        'Paper tones, soft pastels, dark charcoal ink & high readability',
+        style: TextStyle(fontSize: 11.5),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (selected)
+            IconButton(
+              icon: const Icon(Icons.tune_rounded, size: 20),
+              tooltip: 'Customize E-Ink Palette',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const EInkColorSettingsScreen(),
+                  ),
+                );
+              },
+            ),
+          Icon(
+            selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+            color: selected
+                ? primaryAccent
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+            size: 22,
+          ),
+        ],
+      ),
+      onTap: _enableEInkTheme,
     );
   }
 
@@ -395,7 +556,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     required IconData icon,
     required ThemeMode mode,
   }) {
-    final selected = _currentMode == mode;
+    final selected = !_isEInk && _currentMode == mode;
     final primaryAccent = Theme.of(context).colorScheme.primary;
 
     return ListTile(
@@ -421,6 +582,73 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
               size: 22,
             ),
       onTap: () => _setThemeMode(mode),
+    );
+  }
+
+  Widget _buildEInkAccessCard(Color cardColor, Color borderColor) {
+    final einkAccent = ThemeNotifier.instance.einkAccent;
+
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const EInkColorSettingsScreen(),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isEInk ? einkAccent : borderColor,
+            width: _isEInk ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: einkAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.palette_outlined,
+                color: einkAccent,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'E-Ink Palette & Paper Settings',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Customize e-paper tones, highlighters & presets',
+                    style: TextStyle(fontSize: 11.5),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
