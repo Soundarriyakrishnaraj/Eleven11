@@ -506,6 +506,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
   String _priority = 'medium';
   DateTime? _dueDate;
+  TimeOfDay? _dueTime;
   bool _saving = false;
 
   Color get orange => Theme.of(context).colorScheme.primary;
@@ -525,17 +526,31 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     }
   }
 
+  Future<void> _pickDueTime() async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: _dueTime ?? TimeOfDay.now(),
+    );
+    if (selected != null) {
+      setState(() => _dueTime = selected);
+    }
+  }
+
   Future<void> _saveTask() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _saving = true);
 
     try {
+      final dueTimeStr = _dueTime == null
+          ? null
+          : '${_dueTime!.hour.toString().padLeft(2, '0')}:${_dueTime!.minute.toString().padLeft(2, '0')}';
       await _service.createTask(
         title: _titleController.text,
         description: _descriptionController.text,
         priority: _priority,
         dueDate: _dueDate,
+        dueTime: dueTimeStr,
       );
 
       if (!mounted) return;
@@ -635,11 +650,24 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                 onTap: _pickDueDate,
               ),
 
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Due time (syncs to Google Calendar)'),
+                subtitle: Text(
+                  _dueTime == null ? 'No time set' : _dueTime!.format(context),
+                ),
+                trailing: const Icon(Icons.access_time),
+                onTap: _pickDueTime,
+              ),
+
               TextButton(
                 onPressed: () {
-                  setState(() => _dueDate = null);
+                  setState(() {
+                    _dueDate = null;
+                    _dueTime = null;
+                  });
                 },
-                child: const Text('Clear due date'),
+                child: const Text('Clear due date & time'),
               ),
 
               const SizedBox(height: 25),

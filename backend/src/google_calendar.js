@@ -11,8 +11,11 @@ import {
   encryptAes256Gcm,
 } from './security.js';
 
-const GOOGLE_CALENDAR_SCOPE =
-  'https://www.googleapis.com/auth/calendar.events';
+const GOOGLE_CALENDAR_SCOPE = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.app.created',
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+].join(' ');
 
 const GOOGLE_EMAIL_SCOPE =
   'https://www.googleapis.com/auth/userinfo.email';
@@ -1348,5 +1351,263 @@ export async function pullSyncGoogleCalendar(pool, userId, config) {
     }
 
     client.release();
+  }
+}
+
+
+// ============================================================================
+// Personal Google Calendar Task Sync
+// ============================================================================
+
+export async function listUserCalendars(db, userId, config) {
+  requireDatabase(db);
+  if (!isUuid(userId)) throw httpError('Invalid user ID.', 400);
+
+  const oauth = await getAuthenticatedGoogleClient(db, userId, config);
+  try {
+    const calendar = makeCalendarClient(oauth, config);
+    const res = await calendar.calendarList.list({ minAccessRole: 'writer' });
+    const items = (res.data?.items || []).map((c) => ({
+      id: c.id,
+      summary: c.summary || c.id,
+      primary: c.primary === true,
+      timeZone: c.timeZone || 'Asia/Kolkata',
+    }));
+    return items;
+  } finally {
+    await flushGoogleTokenWrites(oauth);
+  }
+}
+
+export async function createTasksCalendar(db, userId, config, timeZone = 'Asia/Kolkata') {
+  requireDatabase(db);
+  if (!isUuid(userId)) throw httpError('Invalid user ID.', 400);
+
+  const oauth = await getAuthenticatedGoogleClient(db, userId, config);
+  try {
+    const calendar = makeCalendarClient(oauth, config);
+    const created = await calendar.calendars.insert({
+      requestBody: {
+        summary: 'Eleven11 Tasks',
+        description: 'Personal tasks synced from Eleven11.',
+        timeZone: timeZone || 'Asia/Kolkata',
+      },
+    });
+    const cal = created.data;
+    await db.query(
+      `UPDATE public.user_google_calendar_tokens
+       SET selected_calendar_id = $2,
+           selected_calendar_name = $3,
+           updated_at = now()
+       WHERE user_id = $1`,
+      [userId, cal.id, cal.summary || 'Eleven11 Tasks'],
+    );
+    return {
+      id: cal.id,
+      summary: cal.summary || 'Eleven11 Tasks',
+      timeZone: cal.timeZone || timeZone,
+    };
+  } finally {
+    await flushGoogleTokenWrites(oauth);
+  }
+}
+
+export async function getTaskSyncSettings(db, userId) {
+  requireDatabase(db);
+  if (!isUuid(userId)) throw httpError('Invalid user ID.', 400);
+
+  const res = await db.query(
+    `SELECT google_email, selected_calendar_id, selected_calendar_name,
+            auto_task_sync, default_reminder_minutes
+     FROM public.user_google_calendar_tokens
+     WHERE user_id = $1`,
+    [userId],
+  );
+  if (res.rows.length === 0) {
+    return {
+      connected: false,
+      selectedCalendarId: 'primary',
+      selectedCalendarName: null,
+      autoTaskSync: false,
+      defaultReminderMinutes: 15,
+    };
+  }
+  const r = res.rows[0];
+  return {
+    connected: true,
+    email: r.google_email,
+    selectedCalendarId: r.selected_calendar_id || 'primary',
+    selectedCalendarName: r.selected_calendar_name || null,
+    autoTaskSync: r.auto_task_sync !== false,
+    defaultReminderMinutes: Number.isInteger(r.default_reminder_minutes)
+      ? r.default_reminder_minutes
+      : 15,
+  };
+}
+
+export async function updateTaskSyncSettings(db, userId, settings = {}) {
+  requireDatabase(db);
+  if (!isUuid(userId)) throw httpError('Invalid user ID.', 400);
+
+  const fields = [];
+  const values = [userId];
+  let idx = 2;
+
+  if (typeof settings.selectedCalendarId === 'string' && settings.selectedCalendarId.trim()) {
+    fields.push(`selected_calendar_id = $${idx++}`);
+    values.push(settings.selectedCalendarId.trim());
+  }
+  if (settings.selectedCalendarName !== undefined) {
+    fields.push(`selected_calendar_name = $${idx++}`);
+    values.push(settings.selectedCalendarName ? String(settings.selectedCalendarName).trim() : null);
+  }
+  if (typeof settings.autoTaskSync === 'boolean') {
+    fields.push(`auto_task_sync = $${idx++}`);
+    values.push(settings.autoTaskSync);
+  }
+  if (Number.isInteger(settings.defaultReminderMinutes) && settings.defaultReminderMinutes >= 0) {
+    fields.push(`default_reminder_minutes = $${idx++}`);
+    values.push(settings.defaultReminderMinutes);
+  }
+
+  if (fields.length > 0) {
+    fields.push('updated_at = now()');
+    await db.query(
+      `UPDATE public.user_google_calendar_tokens SET ${fields.join(', ')} WHERE user_id = $1`,
+      values,
+    );
+  }
+  return getTaskSyncSettings(db, userId);
+}
+
+function buildTaskEventBody(task, defaultReminderMinutes) {
+  const tz = (typeof task.timezone === 'string' && task.timezone.trim())
+    ? task.timezone.trim()
+    : 'Asia/Kolkata';
+  const dateStr = String(task.due_date || '').split('T')[0];
+  const timeStr = String(task.due_time || '09:00').slice(0, 5);
+  const startLocal = `${dateStr}T${timeStr}:00`;
+
+  let endLocal;
+  if (task.end_time) {
+    endLocal = `${dateStr}T${String(task.end_time).slice(0, 5)}:00`;
+  } else {
+    const [hh, mm] = timeStr.split(':').map((n) => parseInt(n, 10) || 0);
+    const total = hh * 60 + mm + 30;
+    const eh = String(Math.floor(total / 60) % 24).padStart(2, '0');
+    const em = String(total % 60).padStart(2, '0');
+    endLocal = `${dateStr}T${eh}:${em}:00`;
+  }
+
+  const isCompleted = task.is_completed === true;
+  const rawTitle = String(task.title || 'Eleven11 Task').trim();
+  const summary = isCompleted && !rawTitle.startsWith('✓ ')
+    ? `✓ ${rawTitle}`
+    : rawTitle;
+
+  const baseDesc = task.description ? String(task.description).trim() : '';
+  const description = isCompleted
+    ? (baseDesc ? `${baseDesc}\n\n[Completed in Eleven11]` : '[Completed in Eleven11]')
+    : baseDesc;
+
+  const reminder = Number.isInteger(task.reminder_minutes)
+    ? task.reminder_minutes
+    : defaultReminderMinutes;
+
+  return {
+    summary,
+    description,
+    start: { dateTime: startLocal, timeZone: tz },
+    end: { dateTime: endLocal, timeZone: tz },
+    reminders: {
+      useDefault: false,
+      overrides: reminder > 0 ? [{ method: 'popup', minutes: reminder }] : [],
+    },
+  };
+}
+
+export async function syncTaskToGoogle(db, userId, taskData, config) {
+  requireDatabase(db);
+  if (!isUuid(userId)) throw httpError('Invalid user ID.', 400);
+  if (!taskData || !isUuid(taskData.id)) throw httpError('Invalid task ID.', 400);
+  if (!taskData.due_date || !taskData.due_time) {
+    return { synced: false, reason: 'missing_date_or_time' };
+  }
+
+  const settings = await getTaskSyncSettings(db, userId);
+  if (!settings.connected || !settings.autoTaskSync) {
+    return { synced: false, reason: 'disabled_or_disconnected' };
+  }
+
+  const calendarId = taskData.google_calendar_id || settings.selectedCalendarId || 'primary';
+  const eventId = taskData.google_event_id || uuidToGoogleEventId(taskData.id);
+  const requestBody = buildTaskEventBody(taskData, settings.defaultReminderMinutes);
+
+  const oauth = await getAuthenticatedGoogleClient(db, userId, config);
+  try {
+    const calendar = makeCalendarClient(oauth, config);
+    let googleRes;
+    if (taskData.google_event_id) {
+      googleRes = await calendar.events.patch({
+        calendarId,
+        eventId,
+        requestBody,
+      });
+    } else {
+      try {
+        googleRes = await calendar.events.insert({
+          calendarId,
+          requestBody: { id: eventId, ...requestBody },
+        });
+      } catch (err) {
+        if (err?.code === 409 || err?.status === 409) {
+          googleRes = await calendar.events.patch({
+            calendarId,
+            eventId,
+            requestBody,
+          });
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const savedEventId = googleRes.data?.id || eventId;
+    await db.query(
+      `UPDATE public.tasks
+       SET google_calendar_id = $3,
+           google_event_id = $4,
+           google_sync_status = 'synced',
+           updated_at = now()
+       WHERE id = $1 AND user_id = $2`,
+      [taskData.id, userId, calendarId, savedEventId],
+    );
+
+    return { synced: true, calendarId, eventId: savedEventId };
+  } finally {
+    await flushGoogleTokenWrites(oauth);
+  }
+}
+
+export async function deleteTaskFromGoogle(db, userId, taskData, config) {
+  requireDatabase(db);
+  if (!isUuid(userId)) throw httpError('Invalid user ID.', 400);
+  const eventId = taskData?.google_event_id;
+  const calendarId = taskData?.google_calendar_id || 'primary';
+  if (!eventId) return { deleted: false, reason: 'no_google_event' };
+
+  const oauth = await getAuthenticatedGoogleClient(db, userId, config);
+  try {
+    const calendar = makeCalendarClient(oauth, config);
+    try {
+      await calendar.events.delete({ calendarId, eventId });
+    } catch (err) {
+      if (err?.code !== 404 && err?.code !== 410 && err?.status !== 404 && err?.status !== 410) {
+        throw err;
+      }
+    }
+    return { deleted: true, calendarId, eventId };
+  } finally {
+    await flushGoogleTokenWrites(oauth);
   }
 }

@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../badges/badge_service.dart';
+import '../../calendar/services/google_calendar_service.dart';
 import '../../goals/services/goal_service.dart';
 
 abstract interface class TaskReader {
@@ -12,6 +13,7 @@ abstract interface class TaskReader {
 class TaskService implements TaskReader {
   final SupabaseClient _client = Supabase.instance.client;
   final GoalService _goalService = GoalService();
+  final GoogleCalendarService _googleCalendarService = GoogleCalendarService();
 
   String get _userId {
     final user = _client.auth.currentUser;
@@ -60,20 +62,38 @@ class TaskService implements TaskReader {
     String? description,
     String priority = 'medium',
     DateTime? dueDate,
+    String? dueTime,
+    String? endTime,
+    String timezone = 'Asia/Kolkata',
+    int? reminderMinutes,
     String? goalId,
   }) async {
-    await _client.from('tasks').insert({
+    final payload = <String, dynamic>{
       'user_id': _userId,
       'goal_id': goalId,
       'title': title.trim(),
       'description': description?.trim(),
       'priority': priority,
       'due_date': dueDate?.toIso8601String().split('T').first,
+      'due_time': ?dueTime,
+      'end_time': ?endTime,
+      'timezone': timezone,
+      'reminder_minutes': ?reminderMinutes,
       'is_completed': false,
-    });
+    };
+
+    final inserted = await _client
+        .from('tasks')
+        .insert(payload)
+        .select()
+        .maybeSingle();
 
     if (goalId != null) {
       await _goalService.syncProgressFromTasks(goalId);
+    }
+
+    if (inserted != null && dueDate != null && dueTime != null) {
+      await _googleCalendarService.syncTask(Map<String, dynamic>.from(inserted));
     }
   }
 
@@ -91,7 +111,7 @@ class TaskService implements TaskReader {
         .eq('user_id', _userId)
         .maybeSingle();
 
-    await _client
+    final updated = await _client
         .from('tasks')
         .update({
           'is_completed': completed,
@@ -99,7 +119,15 @@ class TaskService implements TaskReader {
           'updated_at': now.toUtc().toIso8601String(),
         })
         .eq('id', taskId)
-        .eq('user_id', _userId);
+        .eq('user_id', _userId)
+        .select()
+        .maybeSingle();
+
+    if (updated != null &&
+        updated['due_date'] != null &&
+        updated['due_time'] != null) {
+      await _googleCalendarService.syncTask(Map<String, dynamic>.from(updated));
+    }
 
     final goalId = task?['goal_id']?.toString();
 
@@ -124,7 +152,7 @@ class TaskService implements TaskReader {
   Future<void> deleteTask(String taskId) async {
     final task = await _client
         .from('tasks')
-        .select('goal_id')
+        .select('goal_id, google_calendar_id, google_event_id')
         .eq('id', taskId)
         .eq('user_id', _userId)
         .maybeSingle();
@@ -134,6 +162,10 @@ class TaskService implements TaskReader {
         .delete()
         .eq('id', taskId)
         .eq('user_id', _userId);
+
+    if (task != null && task['google_event_id'] != null) {
+      await _googleCalendarService.deleteTaskEvent(Map<String, dynamic>.from(task));
+    }
 
     final goalId = task?['goal_id']?.toString();
 

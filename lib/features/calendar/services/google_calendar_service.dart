@@ -283,6 +283,115 @@ class GoogleCalendarService {
     }
   }
 
+  /// Lists writable Google Calendars for the authenticated user.
+  Future<List<Map<String, dynamic>>> listCalendars() async {
+    final headers = await _buildHeaders();
+    final res = await _http.get(
+      Uri.parse('$_backendUrl/api/calendar/calendars'),
+      headers: headers,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw GoogleCalendarException(
+        _parseError(res.body) ?? 'Unable to load calendars.',
+        statusCode: res.statusCode,
+      );
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return List<Map<String, dynamic>>.from(data['calendars'] ?? []);
+  }
+
+  /// Creates a dedicated "Eleven11 Tasks" calendar and selects it.
+  Future<Map<String, dynamic>> createTasksCalendar({
+    String timeZone = 'Asia/Kolkata',
+  }) async {
+    final headers = await _buildHeaders();
+    final res = await _http.post(
+      Uri.parse('$_backendUrl/api/calendar/create-tasks-calendar'),
+      headers: headers,
+      body: jsonEncode({'timeZone': timeZone}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw GoogleCalendarException(
+        _parseError(res.body) ?? 'Unable to create Eleven11 Tasks calendar.',
+        statusCode: res.statusCode,
+      );
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return Map<String, dynamic>.from(data['calendar'] as Map);
+  }
+
+  /// Fetches per-user Google Calendar task sync settings.
+  Future<Map<String, dynamic>> getTaskSyncSettings() async {
+    final headers = await _buildHeaders();
+    final res = await _http.get(
+      Uri.parse('$_backendUrl/api/calendar/settings'),
+      headers: headers,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw GoogleCalendarException(
+        _parseError(res.body) ?? 'Unable to load calendar settings.',
+        statusCode: res.statusCode,
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+  }
+
+  /// Updates per-user Google Calendar task sync settings.
+  Future<Map<String, dynamic>> updateTaskSyncSettings({
+    String? selectedCalendarId,
+    String? selectedCalendarName,
+    bool? autoTaskSync,
+    int? defaultReminderMinutes,
+  }) async {
+    final headers = await _buildHeaders();
+    final body = <String, dynamic>{
+      'selectedCalendarId': ?selectedCalendarId,
+      'selectedCalendarName': ?selectedCalendarName,
+      'autoTaskSync': ?autoTaskSync,
+      'defaultReminderMinutes': ?defaultReminderMinutes,
+    };
+    final res = await _http.patch(
+      Uri.parse('$_backendUrl/api/calendar/settings'),
+      headers: headers,
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw GoogleCalendarException(
+        _parseError(res.body) ?? 'Unable to update calendar settings.',
+        statusCode: res.statusCode,
+      );
+    }
+    return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+  }
+
+  /// Syncs a task (create/update/complete) to the user's Google Calendar.
+  Future<void> syncTask(Map<String, dynamic> task) async {
+    try {
+      final headers = await _buildHeaders();
+      await _http.post(
+        Uri.parse('$_backendUrl/api/calendar/sync-task'),
+        headers: headers,
+        body: jsonEncode(task),
+      );
+    } catch (_) {
+      // Best-effort: never block local task operations if offline.
+    }
+  }
+
+  /// Deletes a task's corresponding Google Calendar event.
+  Future<void> deleteTaskEvent(Map<String, dynamic> task) async {
+    try {
+      final headers = await _buildHeaders();
+      await _http.post(
+        Uri.parse('$_backendUrl/api/calendar/delete-task'),
+        headers: headers,
+        body: jsonEncode(task),
+      );
+    } catch (_) {
+      // Best-effort.
+    }
+  }
+
   void _cancelSubscription() {
     _linkSubscription?.cancel();
     _linkSubscription = null;

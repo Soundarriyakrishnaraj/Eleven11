@@ -28,9 +28,15 @@ import {
   disconnectCalendar,
   getAuthUrl,
   getCalendarStatus,
+  getTaskSyncSettings,
   handleOAuthCallback,
+  listUserCalendars,
   pullSyncGoogleCalendar,
   pushEventToGoogle,
+  syncTaskToGoogle,
+  updateTaskSyncSettings,
+  createTasksCalendar,
+  deleteTaskFromGoogle,
 } from './google_calendar.js';
 
 const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
@@ -1325,6 +1331,88 @@ app.post('/api/calendar/pull-sync', async (req, res) => {
     return res.status(500).json({
       error: 'Unable to sync events from Google Calendar.',
     });
+  }
+});
+
+// 8. GET /api/calendar/calendars
+app.get('/api/calendar/calendars', async (req, res) => {
+  const session = await requireCalendarAuth(req, res);
+  if (!session) return;
+  if (!requireGoogleCalendarConfig(res)) return;
+  try {
+    const calendars = await listUserCalendars(pgPool, session.userId, config);
+    return res.json({ calendars });
+  } catch (error) {
+    console.error('Error listing Google calendars:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Unable to list calendars.' });
+  }
+});
+
+// 9. POST /api/calendar/create-tasks-calendar
+app.post('/api/calendar/create-tasks-calendar', async (req, res) => {
+  const session = await requireCalendarAuth(req, res);
+  if (!session) return;
+  if (!requireGoogleCalendarConfig(res)) return;
+  try {
+    const calendar = await createTasksCalendar(pgPool, session.userId, config, req.body?.timeZone);
+    return res.json({ calendar });
+  } catch (error) {
+    console.error('Error creating Eleven11 Tasks calendar:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Unable to create calendar.' });
+  }
+});
+
+// 10. GET /api/calendar/settings
+app.get('/api/calendar/settings', async (req, res) => {
+  const session = await requireCalendarAuth(req, res);
+  if (!session) return;
+  try {
+    const settings = await getTaskSyncSettings(pgPool, session.userId);
+    return res.json(settings);
+  } catch (error) {
+    console.error('Error fetching calendar settings:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Unable to load settings.' });
+  }
+});
+
+// 11. PATCH /api/calendar/settings
+app.patch('/api/calendar/settings', async (req, res) => {
+  const session = await requireCalendarAuth(req, res);
+  if (!session) return;
+  try {
+    const settings = await updateTaskSyncSettings(pgPool, session.userId, req.body || {});
+    return res.json(settings);
+  } catch (error) {
+    console.error('Error updating calendar settings:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Unable to update settings.' });
+  }
+});
+
+// 12. POST /api/calendar/sync-task
+app.post('/api/calendar/sync-task', async (req, res) => {
+  const session = await requireCalendarAuth(req, res);
+  if (!session) return;
+  if (!requireGoogleCalendarConfig(res)) return;
+  try {
+    const result = await syncTaskToGoogle(pgPool, session.userId, req.body, config);
+    return res.json(result);
+  } catch (error) {
+    console.error('Error syncing task to Google Calendar:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Unable to sync task.' });
+  }
+});
+
+// 13. POST /api/calendar/delete-task
+app.post('/api/calendar/delete-task', async (req, res) => {
+  const session = await requireCalendarAuth(req, res);
+  if (!session) return;
+  if (!requireGoogleCalendarConfig(res)) return;
+  try {
+    const result = await deleteTaskFromGoogle(pgPool, session.userId, req.body, config);
+    return res.json(result);
+  } catch (error) {
+    console.error('Error deleting task from Google Calendar:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Unable to delete task event.' });
   }
 });
 

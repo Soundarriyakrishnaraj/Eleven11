@@ -23,6 +23,7 @@ import '../settings/screens/account_settings_screen.dart';
 import '../settings/screens/notification_settings_screen.dart';
 import '../settings/screens/alarm_settings_screen.dart';
 import '../settings/screens/appearance_settings_screen.dart';
+import '../settings/screens/google_calendar_settings_screen.dart';
 import '../settings/screens/personalization_settings_screen.dart';
 import '../settings/screens/focus_settings_screen.dart';
 import '../settings/screens/privacy_settings_screen.dart';
@@ -771,6 +772,20 @@ class AppSettingsScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (_) => const AppearanceSettingsScreen(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // INTEGRATIONS
+          const _SectionHeader('INTEGRATIONS'),
+          _Tile(
+            icon: Icons.calendar_today_outlined,
+            title: 'Google Calendar',
+            subtitle: 'Personal task sync & calendar sharing',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const GoogleCalendarSettingsScreen(),
               ),
             ),
           ),
